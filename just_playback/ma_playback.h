@@ -10,6 +10,7 @@
 typedef struct 
 {
     ma_uint32 num_playback_devices;
+    ma_device_info* pPlaybackInfos;
 
     ma_decoder decoder;
     ma_device_config deviceConfig;
@@ -18,6 +19,7 @@ typedef struct
     ma_uint64 frame_offset;
     
     float playback_volume; // persists across multiple file loads
+    float playback_volume_limit; // persists across multiple file loads
     bool loops_at_end; // persists across multiple file loads
     
     bool frame_offset_modified; // set when some function other than audio_stream_callback modifies frame_offset's value
@@ -38,5 +40,8 @@ ma_result terminate_audio_stream(Attrs* attrs);
 void audio_stream_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
 ma_result set_device_volume(Attrs* attrs);
 ma_result get_device_volume(Attrs* attrs);
+ma_result set_device_volume_limit(Attrs* attrs);
+ma_result get_device_volume_limit(Attrs* attrs);
+void set_playback_device(Attrs* attrs, int idx);
 
 #endif
