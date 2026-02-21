@@ -4,7 +4,7 @@ import platform
 import logging
 from typing import Optional
 
-from tinytag import TinyTag
+from tinytag import TinyTag, TinyTagException
 from _ma_playback import ffi, lib
 from .ma_result import MA_RESULT_STR, MiniaudioError
 
@@ -245,7 +245,7 @@ class Playback:
         """
         try:
             duration = TinyTag.get(path_to_file).duration
-        except Exception as exc:
+        except TinyTagException as exc:
             logging.warning('TinyTag failed to read duration for %s: %s', path_to_file, exc)
             duration = None
 
