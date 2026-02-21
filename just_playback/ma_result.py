@@ -88,10 +88,9 @@ MA_RESULT_STR = dict([
 class MiniaudioError(Exception):
     def __init__(self, *args: object) -> None:
         if args:
-            self.message = args[0]
-        
+            self.message: str | None = str(args[0])
         else:
             self.message = None
-    
+
     def __str__(self) -> str:
-        return self.message if self.message else 'UNKNOWN MA_ERROR'
+        return self.message if self.message is not None else 'UNKNOWN MA_ERROR'

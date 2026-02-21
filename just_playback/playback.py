@@ -2,13 +2,13 @@ import pathlib
 import math
 import platform
 import logging
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
-from typing import Optional, Any
+from typing import Optional
 
 from tinytag import TinyTag
 from _ma_playback import ffi, lib
 from .ma_result import MA_RESULT_STR, MiniaudioError
 
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 
 
 class Playback:
@@ -29,7 +29,7 @@ class Playback:
             lib.init_attrs(self.__ma_attrs)
             
             self.__paused: bool = False
-            self.__file_duration: float = 0.0
+            self.__file_duration: Optional[float] = None
 
             if path_to_file:
                 self.load_file(path_to_file)   
@@ -37,7 +37,10 @@ class Playback:
     def load_file(self, path_to_file: str) -> None:
         """
             Loads an audio file using one of the available backends.
-            This also kills any active playback
+            This also kills any active playback.
+
+            Duration metadata is read from TinyTag first. If TinyTag fails or
+            returns no duration, a decoder-based fallback is used.
 
         Args:
             path_to_file: The absolute or relative path to the audio file
@@ -59,7 +62,7 @@ class Playback:
         self.__bind(lib.init_audio_stream(self.__ma_attrs))
         self.__bind(lib.set_device_volume(self.__ma_attrs))
 
-        self.__file_duration = TinyTag.get(path_to_file).duration
+        self.__file_duration = self.__determine_duration(path_to_file)
 
     def play(self) -> None:
         """
@@ -128,12 +131,15 @@ class Playback:
             inactive
         
         Args:
-            pos: position in seconds for playback to jump to. Its value is clamped
-                 to the interval [0, self.duration].
+            pos: position in seconds for playback to jump to. The value is always
+                 clamped to >= 0 and is additionally clamped to <= self.duration
+                 whenever duration metadata is available.
         """
 
         if self.active:
-            pos = min(max(pos, 0), self.__file_duration)
+            pos = max(pos, 0)
+            if self.__file_duration is not None:
+                pos = min(pos, self.__file_duration)
             self.__ma_attrs.frame_offset = math.floor(pos * self.__ma_attrs.decoder.outputSampleRate)
             self.__ma_attrs.frame_offset_modified = True
     
@@ -209,11 +215,12 @@ class Playback:
     @property
     def duration(self) -> float:
         """
-            The length in seconds of the audio file, which is 0 if no file has
-            been loaded
+            The length in seconds of the loaded audio file.
+            Returns 0 if the file has not been loaded or the duration could not
+            be determined.
         """
 
-        return self.__file_duration
+        return self.__file_duration if self.__file_duration is not None else 0.0
     
     @property
     def volume(self) -> float:
@@ -229,6 +236,28 @@ class Playback:
     @property
     def loops_at_end(self) -> bool:
         return self.__ma_attrs.loops_at_end
+
+    def __determine_duration(self, path_to_file: str) -> Optional[float]:
+        """Return the file duration in seconds when available.
+
+        TinyTag is queried first. If TinyTag fails or cannot determine a
+        duration, this falls back to miniaudio decoder frame metadata.
+        """
+        try:
+            duration = TinyTag.get(path_to_file).duration
+        except Exception as exc:
+            logging.warning('TinyTag failed to read duration for %s: %s', path_to_file, exc)
+            duration = None
+
+        if duration is None:
+            frame_count = ffi.new('ma_uint64 *')
+            ma_res = lib.get_decoder_length_in_pcm_frames(self.__ma_attrs, frame_count)
+            if ma_res == 0 and self.__ma_attrs.decoder.outputSampleRate:
+                duration = frame_count[0] / self.__ma_attrs.decoder.outputSampleRate
+            else:
+                logging.warning('Unable to determine decoder duration for %s', path_to_file)
+
+        return duration
 
     def __bind(self, ma_res: int) -> None:
         """ 

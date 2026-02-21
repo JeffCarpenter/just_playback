@@ -1,29 +1,65 @@
 #include "ma_playback.h"
 
 
-ma_result check_available_playback_devices(Attrs* attrs) 
+static ma_bool32 g_force_device_enumeration_failure = MA_FALSE;
+static ma_bool32 g_force_device_init_failure = MA_FALSE;
+static ma_bool32 g_last_device_probe_cleaned_up = MA_FALSE;
+
+
+void set_force_device_enumeration_failure(ma_bool32 should_fail)
+{
+    g_force_device_enumeration_failure = should_fail;
+}
+
+
+void set_force_device_init_failure(ma_bool32 should_fail)
+{
+    g_force_device_init_failure = should_fail;
+}
+
+
+ma_bool32 last_device_probe_cleaned_up(void)
+{
+    return g_last_device_probe_cleaned_up;
+}
+
+
+ma_result check_available_playback_devices(Attrs* attrs)
 {
     // count the # of available playback devices
 
     ma_context context;
     ma_result ma_res = ma_context_init(NULL, 0, NULL, &context);
+    g_last_device_probe_cleaned_up = MA_FALSE;
+    attrs->num_playback_devices = 0;
+
     if (ma_res != MA_SUCCESS)
     {
         return ma_res;
     }
 
-    else 
-    {
-        ma_device_info* pPlaybackInfos;
-        ma_uint32 playbackCount;
-        ma_device_info* pCaptureInfos;
-        ma_uint32 captureCount;
-        
-        ma_res = ma_context_get_devices(&context, &pPlaybackInfos, &playbackCount, &pCaptureInfos, &captureCount);
-        attrs->num_playback_devices = playbackCount;
+    ma_device_info* pPlaybackInfos;
+    ma_uint32 playbackCount;
+    ma_device_info* pCaptureInfos;
+    ma_uint32 captureCount;
 
-        return ma_res;
+    if (g_force_device_enumeration_failure)
+    {
+        ma_res = MA_ERROR;
     }
+    else
+    {
+        ma_res = ma_context_get_devices(&context, &pPlaybackInfos, &playbackCount, &pCaptureInfos, &captureCount);
+        if (ma_res == MA_SUCCESS)
+        {
+            attrs->num_playback_devices = playbackCount;
+        }
+    }
+
+    ma_context_uninit(&context);
+    g_last_device_probe_cleaned_up = MA_TRUE;
+
+    return ma_res;
 }
 
 
@@ -80,9 +116,22 @@ ma_result init_audio_stream(Attrs* attrs)
     // Initialize the audio playback device with the config gotten from loading the
     // audio file.
 
+    if (g_force_device_init_failure)
+    {
+        attrs->audio_stream_ready = false;
+        return MA_ERROR;
+    }
+
     ma_result ma_res = ma_device_init(NULL, &(attrs->deviceConfig), &(attrs->device));
-    attrs->audio_stream_ready = true;
-    
+    if (ma_res == MA_SUCCESS)
+    {
+        attrs->audio_stream_ready = true;
+    }
+    else
+    {
+        attrs->audio_stream_ready = false;
+    }
+
     return ma_res;
 }
 
@@ -122,6 +171,12 @@ ma_result terminate_audio_stream(Attrs* attrs)
     attrs->audio_stream_ended_naturally = false;
     
     return ma_res;
+}
+
+
+ma_result get_decoder_length_in_pcm_frames(Attrs* attrs, ma_uint64* frame_count)
+{
+    return ma_decoder_get_length_in_pcm_frames(&(attrs->decoder), frame_count);
 }
 
 
