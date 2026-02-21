@@ -33,7 +33,7 @@ Usage
 >>> playback.curr_pos # current absolute playback position in seconds from 
 				  #	the start of the audio file (unlike pygame.mixer.get_pos). 
 >>> playback.paused # True if playback is paused.
->>> playback.duration # length of the audio file in seconds. 
+>>> playback.duration # length of the audio file in seconds (0 if unavailable).
 >>> playback.volume # current playback volume
 >>> playback.loops_at_end # True if playback is set to restart when it completes.
 ```
